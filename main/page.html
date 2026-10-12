@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 · LED Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+  @font-face {
+    font-family: 'system';
+    src: local('Segoe UI');
+  }
+  :root {
+    --bg-0: #0a0c10;
+    --bg-1: #10131a;
+    --panel: rgba(255,255,255,0.035);
+    --panel-border: rgba(255,255,255,0.08);
+    --panel-2: rgba(255,255,255,0.06);
+    --text: #eef0f4;
+    --muted: #8891a3;
+    --muted-2: #5c6577;
+    --accent: #7c9cff;
+    --accent-2: #a78bfa;
+    --ok: #3ddc97;
+    --err: #ff6b6b;
+    --warn: #ffb454;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: radial-gradient(1200px 700px at 15% -10%, #1b2140 0%, transparent 55%),
+                radial-gradient(1000px 700px at 110% 10%, #2a1a3d 0%, transparent 50%),
+                var(--bg-0);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  body { padding: 28px 16px 70px; }
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px 2px var(--accent);
+  }
+  .brand h1 {
+    font-size: 17px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .brand .sub { font-size: 12px; color: var(--muted-2); margin-top: 1px; }
+
+  .badge {
+    font-size: 11.5px;
+    font-weight: 650;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(61,220,151,0.12);
+    color: var(--ok);
+    border: 1px solid rgba(61,220,151,0.3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-transform: capitalize;
+    transition: all 0.2s ease;
+  }
+  .badge::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+  }
+  .badge.offline {
+    background: rgba(255,107,107,0.12);
+    color: var(--err);
+    border-color: rgba(255,107,107,0.3);
+  }
+
+  .card {
+    background: var(--panel);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--panel-border);
+    border-radius: 18px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+  }
+  .card h2 {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted-2);
+    margin: 0 0 16px;
+    font-weight: 650;
+  }
+
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px 10px;
+  }
+  .stat .label { font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+  .stat .value {
+    font-size: 14.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+  }
+
+  .preview {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--panel-border);
+  }
+  .swatch-ring {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: conic-gradient(from 180deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+    flex-shrink: 0;
+  }
+  .swatch {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.15);
+    transition: background 0.25s ease, box-shadow 0.25s ease;
+  }
+  .swatch.blinking { animation: pulse-glow 1.4s ease-in-out infinite; }
+  @keyframes pulse-glow {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(0.88); opacity: 0.7; }
+  }
+  .preview-text .hex {
+    font-size: 15px;
+    font-weight: 650;
+    font-family: 'SF Mono', 'Courier New', monospace;
+    letter-spacing: 0.02em;
+  }
+  .preview-text .mode {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .presets {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .preset {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.12);
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+  }
+  .preset:hover { transform: scale(1.12); border-color: rgba(255,255,255,0.4); }
+  .preset:active { transform: scale(0.95); }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    gap: 14px;
+  }
+  .control-row:last-of-type { margin-bottom: 22px; }
+  .control-row label {
+    font-size: 14px;
+    color: var(--text);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  input[type="color"] {
+    width: 46px; height: 46px;
+    border: none;
+    border-radius: 12px;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 12px; }
+  input[type="color"]::-webkit-color-swatch { border: 2px solid rgba(255,255,255,0.15); border-radius: 12px; }
+
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(124,156,255,0.25), 0 2px 6px rgba(0,0,0,0.3);
+    cursor: pointer;
+  }
+  .rate-value {
+    font-size: 12.5px;
+    color: var(--muted);
+    min-width: 56px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  .switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider-toggle {
+    position: absolute; cursor: pointer; inset: 0;
+    background: rgba(255,255,255,0.12);
+    border-radius: 999px;
+    transition: 0.2s;
+  }
+  .slider-toggle:before {
+    content: ""; position: absolute;
+    height: 20px; width: 20px;
+    left: 3px; top: 3px;
+    background: white; border-radius: 50%;
+    transition: 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  input:checked + .slider-toggle {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+  input:checked + .slider-toggle:before { transform: translateX(20px); }
+
+  .buttons { display: flex; gap: 10px; }
+  button {
+    flex: 1;
+    padding: 13px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 14.5px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.05s ease, filter 0.15s ease;
+  }
+  button:active { transform: scale(0.97); }
+  button.primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border: none;
+    color: #0a0c10;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button:not(.primary):hover { background: rgba(255,255,255,0.1); }
+
+  .toast {
+    position: fixed;
+    left: 50%; bottom: 26px;
+    transform: translateX(-50%) translateY(10px);
+    background: rgba(23,26,33,0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--panel-border);
+    padding: 11px 20px;
+    border-radius: 12px;
+    font-size: 13.5px;
+    font-weight: 550;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { color: var(--err); border-color: rgba(255,107,107,0.35); }
+
+  footer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted-2);
+    margin-top: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <h1>ESP32 LED Control</h1>
+        <div class="sub">WS2812B · GPIO14</div>
+      </div>
+    </div>
+    <span class="badge offline" id="conn-badge">conectando…</span>
+  </header>
+
+  <div class="card">
+    <h2>Estado del dispositivo</h2>
+    <div class="status-grid">
+      <div class="stat"><div class="label">Estado</div><div class="value" id="st-status">—</div></div>
+      <div class="stat"><div class="label">Dirección IP</div><div class="value" id="st-ip">—</div></div>
+      <div class="stat"><div class="label">Hora (UTC)</div><div class="value" id="st-time">—</div></div>
+      <div class="stat"><div class="label">Uptime</div><div class="value" id="st-uptime">—</div></div>
+      <div class="stat"><div class="label">Memoria libre</div><div class="value" id="st-heap">—</div></div>
+      <div class="stat"><div class="label">Último botón</div><div class="value" id="st-button">—</div></div>
+    </div>
+    <div class="preview">
+      <div class="swatch-ring"><div class="swatch" id="preview-swatch"></div></div>
+      <div class="preview-text">
+        <div class="hex" id="preview-hex">#000000</div>
+        <div class="mode" id="preview-mode">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Control del LED</h2>
+
+    <div class="presets" id="presets"></div>
+
+    <div class="control-row">
+      <label for="color-input">Color</label>
+      <input type="color" id="color-input" value="#00ff00">
+    </div>
+
+    <div class="control-row">
+      <label for="blink-toggle">Parpadeo</label>
+      <label class="switch">
+        <input type="checkbox" id="blink-toggle">
+        <span class="slider-toggle"></span>
+      </label>
+    </div>
+
+    <div class="control-row">
+      <label for="rate-input">Velocidad</label>
+      <input type="range" id="rate-input" min="100" max="2000" step="50" value="500">
+      <span class="rate-value" id="rate-value">500 ms</span>
+    </div>
+
+    <div class="buttons">
+      <button class="primary" id="apply-btn">Aplicar</button>
+      <button id="revert-btn">Revertir</button>
+    </div>
+  </div>
+
+  <footer>Práctica Optativa II · API REST sobre ESP-IDF</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+const presetColors = ["#ff3b3b","#3ddc97","#4f9dff","#ffd23f","#c93bff","#3ffcf0","#ffffff","#ff8a3d"];
+const presetsEl = $("presets");
+presetColors.forEach((hex) => {
+  const d = document.createElement("div");
+  d.className = "preset";
+  d.style.background = hex;
+  d.title = hex;
+  d.onclick = () => { $("color-input").value = hex; };
+  presetsEl.appendChild(d);
+});
+
+function hexToRgb(hex) {
+  const v = hex.replace("#", "");
+  return {
+    r: parseInt(v.substring(0, 2), 16),
+    g: parseInt(v.substring(2, 4), 16),
+    b: parseInt(v.substring(4, 6), 16),
+  };
+}
+function rgbToHex(r, g, b) {
+  return "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
+}
+
+let toastTimer = null;
+function showToast(msg, isError) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.toggle("err", !!isError);
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+function formatUptime(s) {
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${h}h ${m}m ${sec}s`;
+}
+
+const stateLabels = {
+  provisioning: "Aprovisionando",
+  connecting: "Conectando",
+  connected: "Conectado",
+  error: "Error",
+  custom: "Personalizado",
+};
+
+async function refreshStatus() {
+  try {
+    const res = await fetch("/api/status");
+    const data = await res.json();
+    const online = data.status === "connected" || data.status === "custom";
+    $("conn-badge").textContent = online ? "en línea" : (data.status === "error" ? "error" : data.status);
+    $("conn-badge").classList.toggle("offline", !online);
+    $("st-status").textContent = stateLabels[data.status] || data.status;
+    $("st-ip").textContent = data.ip;
+    $("st-time").textContent = data.time;
+    $("st-uptime").textContent = formatUptime(data.uptime_s);
+    $("st-heap").textContent = (data.free_heap / 1024).toFixed(1) + " KB";
+    $("st-button").textContent = data.last_button;
+  } catch (e) {
+    $("conn-badge").textContent = "sin conexión";
+    $("conn-badge").classList.add("offline");
+  }
+}
+
+async function refreshLed() {
+  try {
+    const res = await fetch("/api/led");
+    const data = await res.json();
+    const hex = rgbToHex(data.r, data.g, data.b);
+    $("color-input").value = hex;
+    $("blink-toggle").checked = data.blinking;
+    $("rate-input").value = data.rate_ms;
+    $("rate-value").textContent = data.rate_ms + " ms";
+    const sw = $("preview-swatch");
+    sw.style.background = hex;
+    sw.classList.toggle("blinking", data.blinking);
+    $("preview-hex").textContent = hex;
+    $("preview-mode").textContent = data.blinking ? `Parpadeando · ${data.rate_ms} ms` : "Fijo";
+  } catch (e) { /* deja lo último mostrado */ }
+}
+
+$("rate-input").addEventListener("input", () => {
+  $("rate-value").textContent = $("rate-input").value + " ms";
+});
+
+$("apply-btn").addEventListener("click", async () => {
+  const { r, g, b } = hexToRgb($("color-input").value);
+  const body = {
+    r, g, b,
+    blinking: $("blink-toggle").checked,
+    rate_ms: parseInt($("rate-input").value, 10),
+  };
+  try {
+    const res = await fetch("/api/led", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 409) {
+      showToast("El dispositivo no está conectado", true);
+    } else if (res.ok) {
+      showToast("Color aplicado");
+      refreshLed();
+    } else {
+      showToast("Error al aplicar", true);
+    }
+  } catch (e) {
+    showToast("Sin conexión con el ESP32", true);
+  }
+});
+
+$("revert-btn").addEventListener("click", async () => {
+  try {
+    const res = await fetch("/api/led/revert", { method: "POST" });
+    if (res.status === 409) {
+      showToast("El dispositivo no está conectado", true);
+    } else if (res.ok) {
+      showToast("LED revertido");
+      refreshLed();
+    }
+  } catch (e) {
+    showToast("Sin conexión con el ESP32", true);
+  }
+});
+
+refreshStatus();
+refreshLed();
+setInterval(refreshStatus, 3000);
+setInterval(refreshLed, 3000);
+</script>
+</body>
+</html>
